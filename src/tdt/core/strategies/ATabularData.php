@@ -97,7 +97,10 @@ abstract class ATabularData extends AResourceStrategy {
      */
     public function onAdd($package_id, $gen_resource_id) {
 
-        if (!isset($this->PK)) {
+        if (!isset($this->PK) && isset($this->pk)) {
+            $this->PK = $this->pk;
+
+        }else if(empty($this->PK)){
             $this->PK = "";
         }
 
@@ -106,6 +109,8 @@ abstract class ATabularData extends AResourceStrategy {
             // Get the name of the class ( = strategyname) but without the namespace!!
             $strat = $this->getClassName();
             $resource = R::dispense(GenericResource::$TABLE_PREAMBLE . $strat);
+            $resource->setMeta('cast.password','string');
+            $resource->setMeta('cast.pk','string');
 
             $resource->gen_resource_id = $gen_resource_id;
 
@@ -121,8 +126,7 @@ abstract class ATabularData extends AResourceStrategy {
                         $resource->$createParam = $this->$createParam;
                     }
                 }
-            }
-
+            }           
             return R::store($resource);
         } else {
             /**
