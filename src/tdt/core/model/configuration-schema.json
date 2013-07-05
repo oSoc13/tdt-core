@@ -104,7 +104,7 @@
         },
 
         "routes" : {
-            "type" : "object"
+            "type" : "array"
         }
     },
     "required" : ["general","db"]
