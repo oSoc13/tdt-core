@@ -58,7 +58,9 @@ class TDTInfoFormatters extends AReader {
     }
 
     public static function getDoc() {
-        return "Returns all formatters available in the installed datatank.";
+        return "Returns all formatters in this DataTank.";
     }
 
 }
+
+?>

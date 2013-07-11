@@ -17,12 +17,10 @@ use Monolog\Handler\StreamHandler;
 
 class SPARQL extends RDFXML {
 
-    protected $max_sorted_top_rows = 10000;
-
     public function read(&$configObject, $package, $resource) {
-
-        $_GET = $this->php_fix_raw_query();
+        $this->php_fix_raw_query();
         $configObject->query = $this->processParameters($configObject->query);
+
 
         $matches = array();
         preg_match_all("/GRAPH\s*?<(.*?)>/", $configObject->query, $matches, PREG_SET_ORDER);
@@ -38,37 +36,32 @@ class SPARQL extends RDFXML {
         // Create a count query for paging purposes, this assumes that a where clause is included in the query.
         // Note that the where "clause" is obligatory but it's not mandatory it is preceded by a WHERE keyword.
         $query = $configObject->query;
-
         $matches = array();
         $keyword = "";
 
-        $prefix = "";
-
-        if (stripos($query, "select") !== FALSE) { // SELECT query
+        if(stripos($query,"select") === 0){ // SELECT query
             $keyword = "select";
-            $prefix = substr($query, 0, stripos($query,"select"));
-        } elseif (stripos($query, "construct") !== FALSE) { // CONSTRUCT query
+        }elseif(stripos($query,"construct") === 0){ // CONSTRUCT query
             $keyword = "construct";
-            $prefix = substr($query, 0, stripos($query,"construct"));
-        } else { // No valid SPARQL keyword has been found.
+        }else{ // No valid SPARQL keyword has been found.
+
             $this->logError("No valid keyword (select or construct) has been found in the query: $query.");
 
             $exception_config = array();
             $exception_config["log_dir"] = Config::get("general", "logging", "path");
             $exception_config["url"] = Config::get("general", "hostname") . Config::get("general", "subdir") . "error";
-            throw new TDTException(452, array("No valid keyword (select or construct) has been found in the query: $query."), $exception_config);
+            throw new TDTException(500, array("No valid keyword (select or construct) has been found in the query: $query."), $exception_config);
         }
 
+        $query = preg_replace("/($keyword\s*{.*?})/i",'',$query);
 
-        $query = preg_replace("/($keyword\s*{.*?})/i", '', $query);
-
-        if (stripos($query, "where") === FALSE) {
-            preg_match('/({.*}).*/i', $query, $matches);
-        } else {
-            preg_match('/(where\s*{.*}).*/i', $query, $matches);
+        if(stripos($query,"where") === FALSE){
+            preg_match('/({.*}).*/i',$query,$matches);
+        }else{
+            preg_match('/(where\s*{.*}).*/i',$query,$matches);
         }
 
-        if (count($matches) < 2) {
+        if(count($matches) < 2){
             $message = "Failed to extract the where clause from the sparql query: $query";
             $this->logError($message);
 
@@ -81,52 +74,38 @@ class SPARQL extends RDFXML {
         $query = $matches[1];
 
         // Prepare the query to count results.
-        $count_query = $prefix . " SELECT count(*) AS ?count " . $query;
-
+        $count_query = "SELECT count(?s) AS ?count " . $query;
         $count_query = urlencode($count_query);
         $count_query = str_replace("+", "%20", $count_query);
 
         $configObject->uri = $configObject->endpoint . '?query=' . $count_query . '&format=' . urlencode("application/rdf+xml");
-        $count_obj = parent::read($configObject, $package, $resource);
+        $count_obj = parent::read($configObject,$package,$resource);
         $triples = $count_obj->triples;
 
         // Get the results#value, in order to get a count of all the results.
         // This will be used for paging purposes.
         $count = 0;
-        foreach ($triples as $triple) {
-            if (!empty($triple['p']) && preg_match('/.*sparql-results#value/', $triple['p'])) {
+        foreach ($triples as $triple){
+            if(!empty($triple['p']) && preg_match('/.*sparql-results#value/',$triple['p'])){
                 $count = $triple['o'];
             }
         }
 
-        $req_uri = "";
-        if (!empty($configObject->req_uri)) {
-            $req_uri = $configObject->req_uri;
-        }
-
-        // Triplestores (e.g. Virtuoso sometimes have a limit to which rows can be sorted)
-        // if the given limit is higher than this, adjust the limit and log this re-capping of the limit.
-        if($this->limit > $this->max_sorted_top_rows || $this->page_size > $this->max_sorted_top_rows){
-            $this->limit = $this->max_sorted_top_rows;
-            $this->page_size = $this->max_sorted_top_rows;
-            $this->logError("The calculated limit, $this->limit, was too high. We adjusted this to $this->max_sorted_top_rows.");
-        }
-
         // Calculate page link headers, previous and next.
-        if ($this->page > 1) {
-            $this->setLinkHeader($this->page - 1, $this->page_size, "previous", $req_uri);
+        if($this->page > 1){
+            $this->setLinkHeader($this->page-1, $this->page_size, "previous");
         }
 
-        if ($this->limit + $this->offset < $count) {
-            $this->setLinkHeader($this->page + 1, $this->page_size, "next", $req_uri);
+        if($this->limit + $this->offset < $count){
+            $this->setLinkHeader($this->page+1, $this->page_size, "next");
 
-            $last_page = ceil(round($count / $this->limit, 1));
-            if ($last_page > $this->page + 1) {
-                $this->setLinkHeader($last_page, $this->limit, "last", $req_uri);
+            $last_page = round($count / $this->limit,0);
+            if($last_page > $this->page+1){
+                $this->setLinkHeader($last_page,$this->limit, "last");
             }
         }
 
-        if (empty($configObject->isPaged)) {
+        if(empty($configObject->isPaged)){
             $configObject->query = $configObject->query . " OFFSET $this->offset LIMIT $this->limit";
         }
 
@@ -135,8 +114,8 @@ class SPARQL extends RDFXML {
 
         $configObject->uri = $configObject->endpoint . '?query=' . $q . '&format=' . urlencode("application/rdf+xml");
 
-
         return parent::read($configObject, $package, $resource);
+
     }
 
     function php_fix_raw_query() {
@@ -158,7 +137,7 @@ class SPARQL extends RDFXML {
                     $post = '';
 
                     while (!feof($fp))
-                        $post = fread($fp, 1024);
+                    $post = fread($fp, 1024);
 
                     fclose($fp);
                 }
@@ -169,7 +148,6 @@ class SPARQL extends RDFXML {
 
         $raw = !empty($_SERVER['QUERY_STRING']) ? sprintf('%s&%s', $_SERVER['QUERY_STRING'], $post) : $post;
 
-
         $arr = array();
         $pairs = explode('&', $raw);
 
@@ -177,8 +155,8 @@ class SPARQL extends RDFXML {
             if (!empty($i)) {
                 list($name, $value) = explode('=', $i, 2);
 
-                if (isset($arr[$name])) {
-                    if (is_array($arr[$name])) {
+                if (isset($arr[$name]) ) {
+                    if (is_array($arr[$name]) ) {
                         $arr[$name][] = $value;
                     } else {
                         $arr[$name] = array($arr[$name], $value);
@@ -189,72 +167,53 @@ class SPARQL extends RDFXML {
             }
         }
 
-        foreach ($_POST as $key => $value) {
-            if (is_array($arr[$key])) {
+        foreach ( $_POST as $key => $value ) {
+            if (is_array($arr[$key]) ) {
                 $_POST[$key] = $arr[$name];
                 $_REQUEST[$key] = $arr[$name];
             }
         }
 
-        foreach ($_GET as $key => $value) {
-            if (is_array($arr[$key])) {
+        foreach ( $_GET as $key => $value ) {
+            if (is_array($arr[$key]) ) {
                 $_GET[$key] = $arr[$name];
                 $_REQUEST[$key] = $arr[$name];
             }
         }
 
-        # optionally return result array
+    # optionally return result array
         return $arr;
     }
 
     private function processParameters($query) {
+
         $param = $_GET;
-        //var_dump($param);
+
         $placeholders = array();
         preg_match_all("/\\$\\{(.+?)\\}/", $query, $placeholders, PREG_SET_ORDER);
-        for ($i = 0; $i < count($placeholders); $i++) {
 
-            $placeholder = trim($placeholders[$i][1]);
+        for ($i = 1; $i < count($placeholders); $i++) {
+            $placeholder = trim($placeholders[0][$i]);
 
             $elements = array();
             //For example ${x.each('?t = $_','||')}
             preg_match_all("/([a-zA-Z]+?)\\.([a-zA-Z]+?)\\('(.*?)','(.*?)'\\)/", $placeholder, $elements, PREG_SET_ORDER);
 
-            if (!empty($elements)){
+            if (!empty($elements))
                 $placeholder = trim($elements[0][1]);
-            }
 
-            if (!empty($elements[0]) && count($elements[0]) > 0 && count($elements[0]) != 5)
-                throw new \tdt\exceptions\TDTException(400, array("The added placeholder is malformed"), array("log_dir" => Config::get("general","logging","path")));
+            if (count($elements[0]) > 0 && count($elements[0]) != 5)
+                throw new \tdt\exceptions\TDTException(400, array("The added placeholder is malformed"), array());
+
+            if (!isset($param[$placeholder]))
+                throw new \tdt\exceptions\TDTException(400, array("The parameter $placeholder was not provided"), array());
 
             if (empty($elements)) {
-                //${name[0]}
-                $index = strpos($placeholder, "[");
+                $value = $param[$placeholder];
+                if (!is_array($value))
+                    throw new \tdt\exceptions\TDTException(400, array("The parameter $placeholder is single value, array given."), array());
 
-                if ($index !== false) {
-                    $placeholder_name = substr($placeholder,0, $index);
-                    $placeholder_index = substr($placeholder, $index + 1, -1);
-
-                    if (!isset($param[$placeholder_name]))
-                        throw new \tdt\exceptions\TDTException(400, array("The parameter $placeholder_name was not provided"), array("log_dir" => Config::get("general","logging","path")));
-
-
-                    if (!isset($param[$placeholder_name][$placeholder_index]))
-                        throw new \tdt\exceptions\TDTException(400, array("The index $placeholder_index of parameter $placeholder does not exist."), array("log_dir" => Config::get("general","logging","path")));
-
-                    $value = $param[$placeholder_name][$placeholder_index];
-                } else {
-
-                    if (!isset($param[$placeholder]))
-                        throw new \tdt\exceptions\TDTException(400, array("The parameter $placeholder was not provided"), array("log_dir" => Config::get("general","logging","path")));
-
-                    $value = $param[$placeholder];
-
-                    if (is_array($value))
-                        throw new \tdt\exceptions\TDTException(400, array("The parameter $placeholder is single value, array given."), array("log_dir" => Config::get("general","logging","path")));
-                }
                 $value = addslashes($value);
-
                 $query = str_replace("\${" . $placeholder . "}", "\"$value\"", $query);
                 continue;
             }
@@ -268,11 +227,8 @@ class SPARQL extends RDFXML {
             $placeholder = "\${" . $elements[0][0] . "}";
 
             $query = str_replace($placeholder, $replacement, $query);
-
         }
 
-        /*echo $query;
-            exit();*/
         return $query;
     }
 
@@ -306,7 +262,7 @@ class SPARQL extends RDFXML {
         return parent::isValid($package_id, $generic_resource_id);
     }
 
-    private function logError($message) {
+    private function logError($message){
 
         $log = new Logger('SPARQL');
         $log->pushHandler(new StreamHandler(Config::get("general", "logging", "path") . "/log_" . date('Y-m-d') . ".txt", Logger::ERROR));

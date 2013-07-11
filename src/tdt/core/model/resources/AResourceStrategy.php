@@ -181,7 +181,7 @@ abstract class AResourceStrategy {
      * @param int $limit  The limitation of the amount of objects to return
      * @param int $offset The offset from where to begin to return objects (default = 0)
      */
-    protected function setLinkHeader($page,$page_size,$referral = "next", $uri = ""){
+    protected function setLinkHeader($page,$page_size,$referral = "next"){
 
         /**
          * Process the correct referral options(next | previous)
@@ -190,21 +190,16 @@ abstract class AResourceStrategy {
            $log = new Logger('AResourceStrategy');
            $log->pushHandler(new StreamHandler(Config::get("general", "logging", "path") . "/log_" . date('Y-m-d') . ".txt", Logger::ERROR));
            $log->addError("No correct referral has been found, options are 'next' or 'previous', the referral given was: $referral");
-        }
-
-        if(empty($uri)){
-            $uri = Config::get("general","hostname") . Config::get("general","subdir") . $this->package . "/" . $this->resource;
-        }
+       }
 
         /**
          * Check if the Link header has already been set, with a next relationship for example.
          * If so we have to append the Link header instead of hard setting it
          */
         $link_header_set = false;
-
         foreach(headers_list() as $header){
             if(substr($header,0,4) == "Link"){
-                $header.=", ". $uri . ".about?page="
+                $header.=", ". Config::get("general","hostname") . Config::get("general","subdir") . $this->package . "/" . $this->resource . ".about?page="
                 . $page . "&page_size=" . $page_size . ";rel=" . $referral;
                 header($header);
                 $link_header_set = true;
@@ -212,7 +207,7 @@ abstract class AResourceStrategy {
         }
 
         if(!$link_header_set){
-            header("Link: ". $uri . ".about?page="
+            header("Link: ". Config::get("general","hostname") . Config::get("general","subdir") . $this->package . "/" . $this->resource . ".about?page="
                 . $page . "&page_size=" . $page_size . ";rel=" . $referral);
         }
     }
@@ -264,9 +259,9 @@ abstract class AResourceStrategy {
                 // paging should be (x=size) x, x, x, y < x EOF
                 $page = $this->offset/$this->limit;
                 $page = round($page,0,PHP_ROUND_HALF_DOWN);
-                if($page == 0){
+                if($page==0){
                     $page = 1;
-                }                
+                }
                 $this->page = $page;
                 $this->page_size = $this->limit ;
             }
