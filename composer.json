@@ -1,5 +1,5 @@
 {
-    "name": "oSoc13/tdt/core",
+    "name": "oSoc13-tdt/core",
     "description": "A RESTful data adapter",
     "keywords": ["data adapter", "data transformation", "REST API"],
     "homepage": "http://thedatatank.com",
